@@ -1,0 +1,33 @@
+﻿.env
+node_modules/
+target/
+dist/
+build/
+*.log
+.idea/
+.vscode/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
+venv/
+.venv/
+
+# Build files
+node_modules/
+target/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
