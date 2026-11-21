@@ -1,0 +1,138 @@
+name: DataPulse CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+
+  # JOB 1: Backend Testing
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Backend Dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Run Backend Tests
+        working-directory: backend
+        run: npm test
+
+
+  # JOB 2: Python EDA Testing
+  python-eda:
+    name: Python EDA Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Dependencies
+        working-directory: python-eda
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run Python Tests
+        working-directory: python-eda
+        run: pytest
+
+
+  # JOB 3: Frontend Build
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm run build
+
+
+  # JOB 4: Docker Build and Push
+  docker:
+    name: Docker Build and Push
+    runs-on: ubuntu-latest
+
+    needs:
+      - backend
+      - python-eda
+      - frontend
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Backend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ashutoshkt2245/datapulse-backend:latest
+            ashutoshkt2245/datapulse-backend:${{ github.sha }}
+
+      - name: Build and Push Frontend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ashutoshkt2245/datapulse-frontend:latest
+            ashutoshkt2245/datapulse-frontend:${{ github.sha }}
+
+      - name: Build and Push Python EDA Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./python-eda
+          push: true
+          tags: |
+            ashutoshkt2245/datapulse-eda:latest
+            ashutoshkt2245/datapulse-eda:${{ github.sha }}
