@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const app = require('../src/app');
 const datasetModel = require('../src/models/datasetModel');
 const analysisModel = require('../src/models/analysisModel');
-const pythonClient = require('../utils/pythonClient');
+const pythonClient = require('../src/utils/pythonClient');
 
 jest.mock('../src/models/datasetModel');
 jest.mock('../src/models/analysisModel');
@@ -20,7 +20,12 @@ describe('Datasets API Endpoints', () => {
   describe('GET /api/datasets', () => {
     it('should list datasets for logged-in user', async () => {
       datasetModel.getDatasetsByUser.mockResolvedValue([
-        { id: 10, filename: 'data.csv', status: 'completed', uploaded_at: new Date().toISOString() },
+        {
+          id: 10,
+          filename: 'data.csv',
+          status: 'completed',
+          uploaded_at: new Date().toISOString(),
+        },
       ]);
 
       const res = await request(app)
@@ -41,16 +46,19 @@ describe('Datasets API Endpoints', () => {
         filename: 'test.csv',
         status: 'pending',
       });
+
       datasetModel.updateDatasetStatus.mockResolvedValue({
         id: 10,
         user_id: 1,
         filename: 'test.csv',
         status: 'completed',
       });
+
       pythonClient.processDataset.mockResolvedValue({
         summary: { columns: ['age', 'salary'], stats: {} },
         charts: { histogram: {} },
       });
+
       analysisModel.createAnalysis.mockResolvedValue({
         id: 5,
         dataset_id: 10,
@@ -86,6 +94,7 @@ describe('Datasets API Endpoints', () => {
         filename: 'test.csv',
         status: 'completed',
       });
+
       analysisModel.getAnalysisByDatasetId.mockResolvedValue({
         id: 5,
         dataset_id: 10,
@@ -107,7 +116,7 @@ describe('Datasets API Endpoints', () => {
     it('should forbid access if dataset belongs to another user', async () => {
       datasetModel.getDatasetById.mockResolvedValue({
         id: 20,
-        user_id: 999, // Different user
+        user_id: 999,
         filename: 'secret.csv',
         status: 'completed',
       });
