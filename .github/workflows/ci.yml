@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+
 jobs:
   build_and_test:
     name: Build, Test, Scan & Push
@@ -24,12 +27,12 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: backend/package.json
+          cache-dependency-path: backend/package-lock.json
 
       - name: Backend - Install Dependencies & Run Tests
+        working-directory: backend
         run: |
-          cd backend
-          npm ci || npm install
+          npm ci
           npm test
 
       # 3. Setup Python & Test EDA Service
@@ -41,17 +44,24 @@ jobs:
           cache-dependency-path: python-eda/requirements.txt
 
       - name: Python EDA - Install Dependencies & Run Tests
+        working-directory: python-eda
         run: |
-          cd python-eda
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pytest
 
       # 4. Frontend - Install Dependencies & Build
+      - name: Set up Node.js for Frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Frontend - Install Dependencies & Build
+        working-directory: frontend
         run: |
-          cd frontend
-          npm ci || npm install
+          npm ci
           npm run build
 
       # 5. SonarQube Code Analysis
@@ -67,44 +77,58 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
-      # 7. Build Docker Images with Commit SHA
+      # 7. Build Docker Images
       - name: Build Docker Images
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           REPO_USER=${DOCKERHUB_USERNAME:-datapulse}
-          docker build -t $REPO_USER/datapulse-backend:${{ github.sha }} -t $REPO_USER/datapulse-backend:latest backend
-          docker build -t $REPO_USER/datapulse-frontend:${{ github.sha }} -t $REPO_USER/datapulse-frontend:latest frontend
-          docker build -t $REPO_USER/datapulse-eda:${{ github.sha }} -t $REPO_USER/datapulse-eda:latest python-eda
 
-      # 8. Run Trivy Vulnerability Scans on built images (Fail on Critical / CVSS >= 7)
+          docker build \
+            -t $REPO_USER/datapulse-backend:${{ github.sha }} \
+            -t $REPO_USER/datapulse-backend:latest backend
+
+          docker build \
+            -t $REPO_USER/datapulse-frontend:${{ github.sha }} \
+            -t $REPO_USER/datapulse-frontend:latest frontend
+
+          docker build \
+            -t $REPO_USER/datapulse-eda:${{ github.sha }} \
+            -t $REPO_USER/datapulse-eda:latest python-eda
+
+      # 8. Run Trivy Vulnerability Scans
       - name: Run Trivy Image Scans
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           REPO_USER=${DOCKERHUB_USERNAME:-datapulse}
+
           trivy image --exit-code 1 --severity HIGH,CRITICAL $REPO_USER/datapulse-backend:${{ github.sha }}
           trivy image --exit-code 1 --severity HIGH,CRITICAL $REPO_USER/datapulse-frontend:${{ github.sha }}
           trivy image --exit-code 1 --severity HIGH,CRITICAL $REPO_USER/datapulse-eda:${{ github.sha }}
         continue-on-error: true
 
-      # 9. Docker Hub Login & Push Images
-      - name: Log in to Docker Hub
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      # 9. Login to Docker Hub
+      - name: Login to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # 10. Push Docker Images
       - name: Push Docker Images
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
-          REPO_USER=${DOCKERHUB_USERNAME:-datapulse}
+          REPO_USER=$DOCKERHUB_USERNAME
+
           docker push $REPO_USER/datapulse-backend:${{ github.sha }}
           docker push $REPO_USER/datapulse-backend:latest
+
           docker push $REPO_USER/datapulse-frontend:${{ github.sha }}
           docker push $REPO_USER/datapulse-frontend:latest
+
           docker push $REPO_USER/datapulse-eda:${{ github.sha }}
           docker push $REPO_USER/datapulse-eda:latest
